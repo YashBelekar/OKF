@@ -1,0 +1,5 @@
+[
+  {"question": "What topics are covered in my documents?", "expect_keywords": []},
+  {"question": "Replace this with a question whose answer is in one of your documents", "expect_keywords": ["replace-with-a-word-from-the-answer"], "expect_document": "your-file.pdf"},
+  {"question": "zebra giraffe safari itinerary", "expect_insufficient": true}
+]
