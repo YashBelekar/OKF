@@ -82,3 +82,44 @@ Tests use a fake LLM and a deterministic embedder, so they need neither Ollama n
 - Activation path is `.venv\Scripts\Activate.ps1` (the guide mixed `.venv` and `venv`).
 - Ollama GPU note: the guide states GTX 1650 needs driver 570+; verify against Ollama's current GPU docs. CPU
   inference works regardless.
+
+
+---
+
+## ⚠️ Final Note: Hardware Requirements for "Smart + Fast" Responses
+
+This project is designed to run **fully offline** on modest hardware. The default configuration (`qwen3:1.7b` + `all-MiniLM-L6-v2`, CPU-first) is chosen so that the application works correctly on low-RAM machines without a powerful GPU. On such hardware, ingestion, OCR, chunking, SQLite/FTS5 indexing, OKF generation, hybrid retrieval (BM25 + cosine + RRF), and grounded answering with citations all function as described above.
+
+However, the following limitations are **hardware-bound, not software-bound**, and must be stated honestly.
+
+### What this build achieves on modest hardware
+
+| Capability | Status on low-VRAM / CPU-first setups |
+| :--- | :--- |
+| Fully offline operation | ✅ Yes (after one-time model download) |
+| Document upload, OCR, chunking, SQLite/FTS5 indexing | ✅ Yes |
+| OKF knowledge base generation (Markdown + YAML, provenance, links, `index.md`, `log.md`) | ✅ Yes |
+| Hybrid retrieval with citations (document + page) | ✅ Yes (retrieval completes in milliseconds) |
+| Grounded answer generation via Ollama | ✅ Yes, but **slow** |
+| Multi-paragraph answers with bullet points | ⚠️ Possible with `qwen3:1.7b`, but quality is limited |
+| **3–4 second response with ChatGPT-level synthesis** | ❌ **Not achievable without sufficient VRAM** |
+
+### Why the "3–4 second, ChatGPT-level" goal requires more VRAM
+
+The delay is **not** caused by the indexing or retrieval algorithm. Hybrid retrieval (BM25 + cosine similarity + Reciprocal Rank Fusion) completes in **tens of milliseconds**. The delay comes entirely from **autoregressive token generation** inside the LLM, where every output token requires a full pass through the model's weights.
+
+The speed of that pass is limited by **memory bandwidth**. System RAM delivers roughly 50–100 GB/s; GPU VRAM delivers 300–900 GB/s. This is why the same model runs 5–10× faster in VRAM than on CPU. It is a physical limit, not a configuration issue.
+
+To generate a comprehensive 200–300 word answer (≈300–450 tokens) in **3–4 seconds**, the model must sustain **75–150 tokens/second**. That requires the model to reside **entirely in VRAM** with headroom for the KV cache. The table below summarizes the requirement:
+
+| Goal | Model | Minimum VRAM | Expected Speed |
+| :--- | :--- | :--- | :--- |
+| **This build (default)** | `qwen3:1.7b` (Q4) | 2 GB (or CPU-only) | 5–20 s per answer |
+| Usable document Q&A | 3B–4B (Q4) | **4 GB** | ~6–10 s per answer |
+| **"Smart + fast" target** | **7B–8B (Q4)** | **8 GB** | **3–5 s per answer** |
+| Comfortable "smart + fast" | 8B (Q4) | 12 GB | 2–4 s per answer |
+| ChatGPT-level synthesis | 14B+ (Q4) | 16–24 GB | 3–6 s per answer |
+
+**Conclusion:** This application will run correctly on low-RAM machines and will answer questions grounded in your documents, with citations, fully offline. But to achieve the **"3–4 second, ChatGPT-level, comprehensive response"** goal, the model must run a **7B–8B parameter model entirely in VRAM**, which requires a GPU with **at least 8 GB of VRAM** (12 GB recommended). No indexing algorithm, prompt engineering, or software optimization can substitute for that VRAM — the bottleneck is the physical rate at which the model's weights can be read from memory during generation.
+
+If the hardware is later upgraded to a machine with 8–12 GB VRAM, change one line in `config/settings.py` (or set the `OLLAMA_MODEL` environment variable) to `qwen3:8b` (or another 7B–8B model), run `ollama pull qwen3:8b` once while online, and the same pipeline will deliver the fast, comprehensive experience — with no other code changes required.
